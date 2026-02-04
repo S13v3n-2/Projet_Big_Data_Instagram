@@ -1,2 +1,6 @@
 .venv/
 __pycache__/
+/docker_config/*
+/Projet_Big_Data_Instagram/docker_config/*
+/big_data/Projet_Big_Data/Projet_Big_Data_Instagram/docker_config/*
+/docker_config/*
