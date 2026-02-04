@@ -1,8 +1,2 @@
-data/*.csv
-data/*.db
-data/*.parquet
-.venv/data/*.csv
-data/*.db
-data/*.parquet
 .venv/
 __pycache__/
