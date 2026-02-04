@@ -123,8 +123,7 @@ Résultats **K-Means clustering + prédictions XGBoost** par utilisateur.
 | `lifetime_value_estimate` | LTV estimé (€) |
 
 **Utilisation** : 
-API : Endpoint /user-profile/{user_id} pour prédictions individuelles
-Power BI : Dashboard personas (scatter plot churn vs engagement)
+API : Endpoint /user-profile/{user_id} pour prédictions individuelles + Power BI : Dashboard personas (scatter plot churn vs engagement)
 
 #### **Datamart 3 : `gold.content_performance`**
 
@@ -142,8 +141,7 @@ Performance globale par type/thème de contenu (pour dashboard).
 | `rank_in_type` | Rang via Window Function |
 
 **Utilisation** : 
-API : Endpoint /content-stats pour ranking contenus
-Power BI : Bar chart "Top Contenus par Type/Thème"
+API : Endpoint /content-stats pour ranking contenus + Power BI : Bar chart "Top Contenus par Type/Thème"
 
 #### **Datamart 4 : `gold.lifestyle_impact`**
 
@@ -161,8 +159,7 @@ Analyse **lifestyle vs engagement** (stress, travail, santé).
 | `over_usage_pct` | % users sur-usage (>5h/j) |
 
 **Utilisation** : 
-API : Endpoint /wellbeing-insights pour alertes santé numérique
-Power BI : Scatter plot stress vs engagement par segment
+API : Endpoint /wellbeing-insights pour alertes santé numérique + Power BI : Scatter plot stress vs engagement par segment
 
 ## 3. Stack Technique
 
