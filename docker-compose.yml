@@ -14,7 +14,7 @@ services:
       - CLUSTER_NAME=test
       - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
     env_file:
-      - ./hadoop.env
+      - ./src/conf_hadoop/hadoop.env
 
   datanode:
     image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
@@ -28,7 +28,7 @@ services:
     ports:
       - "9864:9864"
     env_file:
-      - ./hadoop.env
+      - ./src/conf_hadoop/hadoop.env
 
   resourcemanager:
     image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
@@ -37,7 +37,7 @@ services:
     environment:
       SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864"
     env_file:
-      - ./hadoop.env
+      - ./src/conf_hadoop/hadoop.env
 
   nodemanager1:
     image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
@@ -46,7 +46,7 @@ services:
     environment:
       SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
     env_file:
-      - ./hadoop.env
+      - ./src/conf_hadoop/hadoop.env
 
   historyserver:
     image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
@@ -57,7 +57,7 @@ services:
     volumes:
       - "./docker_config/historyserver:/hadoop/yarn/timeline"
     env_file:
-      - ./hadoop.env
+      - ./src/conf_hadoop/hadoop.env
 
   spark-master:
     image: bde2020/spark-master:3.0.0-hadoop3.2
@@ -115,7 +115,7 @@ services:
       - datanode
       - hive-metastore-postgresql
     env_file:
-      - ./hadoop-hive.env
+      - ./src/conf_hadoop/hadoop-hive.env
     environment:
       HIVE_CORE_CONF_javax_jdo_option_ConnectionURL: "jdbc:postgresql://hive-metastore-postgresql/metastore"
       SERVICE_PRECONDITION: "hive-metastore:9083"
@@ -126,7 +126,7 @@ services:
     image: bde2020/hive:2.3.2-postgresql-metastore
     container_name: hive-metastore
     env_file:
-      - ./hadoop-hive.env
+      - ./src/conf_hadoop/hadoop-hive.env
     command: /opt/hive/bin/hive --service metastore
     environment:
       SERVICE_PRECONDITION: "namenode:9870 datanode:9864 hive-metastore-postgresql:5432"
