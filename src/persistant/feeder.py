@@ -1,23 +1,33 @@
+# -*- coding: utf-8 -*-
 from datetime import date
 from pyspark.sql import SparkSession, functions as F
 from pyspark.sql.types import *
-import sqlite3
-import time
 
+# Initialisation Spark
 spark = (
     SparkSession.builder
-    .appName("Instagram_Bronze_Feeder")
+    .appName("Instagram_Bronze_JDBC_Feeder")
     .config("spark.sql.adaptive.enabled", "true")
     .config("spark.sql.parquet.compression.codec", "snappy")
     .getOrCreate()
 )
 
-print("Demarrage ingestion Bronze")
+print("Demarrage de l ingestion Bronze via JDBC...")
 
-# Ingestion CSV Profils
-input_csv_path = "file:///source/instagram.csv"
+# --- 1. LECTURE SQLITE VIA JDBC ---
+# Spark utilisera le JAR passe en paramètre au spark-submit
+df_db = (
+    spark.read
+    .format("jdbc")
+    .option("url", "jdbc:sqlite:/source/instagram_data.db")
+    .option("dbtable", "Instagramme_Usage_Logs")
+    .option("driver", "org.sqlite.JDBC")
+    .load()
+)
 
+# --- 2. LECTURE CSV ---
 schema_profiles = StructType([
+    StructField("user_id", IntegerType(), True),
     StructField("app_name", StringType(), True),
     StructField("gender", StringType(), True),
     StructField("urban_rural", StringType(), True),
@@ -49,40 +59,34 @@ schema_profiles = StructType([
     StructField("user_engagement_score", DoubleType(), True)
 ])
 
-df_profiles = (
+df_csv = (
     spark.read
     .option("header", "true")
     .schema(schema_profiles)
-    .csv(input_csv_path)
+    .csv("file:///source/instagram.csv")
 )
 
-print("Nombre de lignes CSV:", df_profiles.count())
-
-today = date.today()
-df_profiles_bronze = (
-    df_profiles
+# --- 3. JOINTURE ET ENRICHISSEMENT ---
+df_bronze = (
+    df_csv.join(df_db, on="user_id", how="left")
     .withColumn("ingestion_timestamp", F.current_timestamp())
-    .withColumn("source", F.lit("csv_lifestyle"))
-    .withColumn("year", F.lit(today.year))
-    .withColumn("month", F.lit(today.month))
-    .withColumn("day", F.lit(today.day))
+    .withColumn("source", F.lit("csv_db_jdbc"))
+    .withColumn("year", F.lit(date.today().year))
+    .withColumn("month", F.lit(date.today().month))
+    .withColumn("day", F.lit(date.today().day))
 )
 
-df_profiles_bronze.cache()
+# --- 4. ECRITURE HDFS ---
+output_path = "hdfs://namenode:9000/lakehouse/bronze/instagram_users_profiles"
 
-output_profiles = "hdfs://namenode:9000/lakehouse/bronze/instagram_users_profiles"
-
-#time.sleep(60)
 (
-    df_profiles_bronze
+    df_bronze
     .repartition(8)
     .write
     .mode("overwrite")
     .partitionBy("year", "month", "day", "urban_rural")
-    .parquet(output_profiles)
+    .parquet(output_path)
 )
 
-print("Profils ecrits dans HDFS")
-print("Ingestion Bronze terminee")
-
+print("Ingestion Bronze JDBC terminee avec succes !")
 spark.stop()

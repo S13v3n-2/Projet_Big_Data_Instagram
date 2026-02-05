@@ -85,6 +85,7 @@ services:
       - ./data:/source
       - ./src/persistant:/opt/pipeline
       - ./spark/jars:/opt/spark/jars
+      - ./src/conf_spark/spark-defaults.conf:/spark/conf/spark-defaults.conf
     networks:
       - bigdata-network
 
@@ -105,6 +106,7 @@ services:
       - ./data:/source 
       - ./lakehouse:/lakehouse
       - ./spark/jars:/opt/spark/jars
+      - ./src/conf_spark/spark-defaults.conf:/spark/conf/spark-defaults.conf
     networks:
       - bigdata-network
 
@@ -125,6 +127,7 @@ services:
       - ./lakehouse:/lakehouse
       - ./data:/source
       - ./spark/jars:/opt/spark/jars
+      - ./src/conf_spark/spark-defaults.conf:/spark/conf/spark-defaults.conf
     networks:
       - bigdata-network
 
