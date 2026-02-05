@@ -10,7 +10,7 @@ print("--- DEBUT DE LA VERIFICATION ---")
 
 try:
     # Lecture des donnees
-    path = "hdfs://namenode:9000/lakehouse/bronze/instagram_users_profiles"
+    path = "hdfs://namenode:9000/lakehouse/raw/instagram_data_raw"
     df = spark.read.parquet(path)
 
     # 1. Nombre de colonnes
