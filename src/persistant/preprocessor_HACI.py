@@ -100,7 +100,6 @@ def main():
         except Exception as e:
             logger.error("Erreur durant le traitement Silver: {}".format(str(e)))
 
-
     except Exception as e:
         logger.error("Erreur durant le traitement Silver: {}".format(str(e)))
     finally:
