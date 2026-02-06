@@ -15,7 +15,7 @@ logger = logging.getLogger("SilverProcessor")
 
 
 def main():
-    # Paramétrage (Exigence: aucun chemin en dur [cite: 28, 41])
+    # Paramétrage
     if len(sys.argv) < 2:
         logger.error("Usage: preprocessor.py <input_raw_path>")
         sys.exit(1)
@@ -54,20 +54,52 @@ def main():
         window_spec = Window.partitionBy("country").orderBy(F.desc("user_engagement_score"))
         df_silver = df_clean.withColumn("engagement_rank", F.row_number().over(window_spec))
 
-        # --- ECRITURE SILVER (Hive/HDFS [cite: 22, 45]) ---
+        # --- ECRITURE SILVER (Hive/HDF)
         spark.sql("CREATE DATABASE IF NOT EXISTS silver")
 
-        output_table = "instagram_data_silver"
-        hdfs_path = "hdfs://namenode:9000/lakehouse/silver/instagram_data_silver" # Rendre dynamique
+        #_____ Creation table global silver
+        output_table = "instagram_data_silver_full"
+        hdfs_path = "hdfs://namenode:9000/lakehouse/silver/" # Rendre dynamique
 
         df_silver.repartition(8).write \
             .mode("overwrite") \
             .format("parquet") \
             .partitionBy("year", "month", "day","country") \
-            .option("path", hdfs_path) \
+            .option("path", hdfs_path + "instagram_data_silver_full") \
             .saveAsTable(output_table)
 
         logger.info("Traitement Silver termine avec succes vers {}".format(output_table))
+
+        # _____ Creation table silver users_profiles
+        try :
+            df_silver.printSchema()
+            cols_profiles = ["user_id", "age", "gender", "country", "content_type_preference",
+                             "preferred_content_theme", "perceived_stress_score", "weekly_work_hours",
+                             "exercise_hours_per_week", "year", "month", "day"]  # On garde les partitions
+
+            cols_usage = ["user_id", "daily_active_minutes_instagram", "user_engagement_score",
+                          "notification_response_rate", "subscription_status", "time_on_reels_per_day",
+                          "last_login_date", "year", "month", "day", "country"]
+            df_silver_users_profiles = df_silver.select(*cols_profiles)
+            df_silver_users_usage = df_silver.select(*cols_usage)
+
+            df_silver_users_profiles.repartition(8).write \
+                .mode("overwrite") \
+                .format("parquet") \
+                .partitionBy("year", "month", "day", "country") \
+                .option("path", hdfs_path + "instagram_data_users_profiles") \
+                .saveAsTable("instagram_data_users_profiles")
+
+            df_silver_users_usage.repartition(8).write \
+                .mode("overwrite") \
+                .format("parquet") \
+                .partitionBy("year", "month", "day", "country") \
+                .option("path", hdfs_path + "instagram_data_users_usage") \
+                .saveAsTable("instagram_data_users_usage")
+
+        except Exception as e:
+            logger.error("Erreur durant le traitement Silver: {}".format(str(e)))
+
 
     except Exception as e:
         logger.error("Erreur durant le traitement Silver: {}".format(str(e)))
