@@ -11,11 +11,13 @@ log_dir = "/opt/pipeline/logs"
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
 
-log_filename = os.path.join(log_dir, "feeder_logs.log")
+log_filename = "/opt/pipeline/logs/feeder_logs.log"
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filename=log_filename, # Redirige les flux vers le fichier directement
+    filemode='a'            # 'a' pour ajouter au fichier, 'w' pour écraser à chaque run
 )
 logger = logging.getLogger("FeederApp_RAW")
 
@@ -66,6 +68,8 @@ def main():
         # On utilise saveAsTable pour la visibilité dans Hive
         # On définit un chemin HDFS pour le Data Lake RAW
         hdfs_path = "hdfs://namenode:9000/lakehouse/raw/instagram_data_raw"
+
+        logger.info("Debut de l'ecriture du RAW")
 
         df_raw.repartition(8).write \
             .mode("overwrite") \
