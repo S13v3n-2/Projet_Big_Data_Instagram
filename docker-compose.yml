@@ -182,7 +182,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: instagram_db
     ports:
-      - "5431:5431"
+      - "5431:5432"
     volumes:
       - "./docker_config/postgres:/var/lib/postgresql/data"
       - "./init-scripts:/docker-entrypoint-initdb.d"
