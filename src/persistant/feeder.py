@@ -5,7 +5,7 @@ from datetime import datetime
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
-# _____CONFIGURATION DES LOGS_____
+# _____ CONFIGURATION DES LOGS _____
 # Le sujet impose l'export des logs dans un fichier .log
 log_dir = "/opt/pipeline/logs"
 if not os.path.exists(log_dir):
@@ -16,8 +16,8 @@ log_filename = "/opt/pipeline/logs/feeder_logs.log"
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    filename=log_filename, # Redirige les flux vers le fichier directement
-    filemode='a'            # 'a' pour ajouter au fichier, 'w' pour écraser à chaque run
+    filename=log_filename,
+    filemode='a'
 )
 logger = logging.getLogger("FeederApp_RAW")
 
@@ -30,7 +30,6 @@ def main():
 
     csv_input_path = sys.argv[1]
     jdbc_url = sys.argv[2]
-    raw_output_path = "hdfs://namenode:9000/lakehouse/raw/instagram_data_raw"
 
     spark = SparkSession.builder \
         .appName("Instagram_Bronze_JDBC_Feeder") \
@@ -54,7 +53,6 @@ def main():
             .load()
 
         # _____JOINTURE (Pour la couche RAW)_____
-        # jointures
         df_joined = df_csv.join(df_db, on="user_id", how="left")
 
         # _____PARTITIONNEMENT DYNAMIQUE_____
@@ -78,7 +76,7 @@ def main():
             .option("path", hdfs_path) \
             .saveAsTable("instagram_data_raw") #Supprimer
 
-        logger.info("Ingestion RAW terminee. Table Hive: {} creee sur {}".format(raw_output_path, hdfs_path))
+        logger.info("Ingestion RAW terminee. Table Hive: {}".format(hdfs_path))
 
     except Exception as e:
         logger.error("Erreur critique: {}".format(str(e)))

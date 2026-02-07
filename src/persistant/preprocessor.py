@@ -4,16 +4,15 @@ import logging
 from pyspark.sql import SparkSession, functions as F
 from pyspark.sql.window import Window
 
-# --- CONFIGURATION DES LOGS (Exigence: 1pt) ---
+# ___ CONFIGURATION DES LOGS ___
 log_filename = "/opt/pipeline/logs/silver_logs.log"
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    filename=log_filename, # Redirige les flux vers le fichier directement
-    filemode='a'            # 'a' pour ajouter au fichier, 'w' pour écraser à chaque run
+    filename=log_filename,
+    filemode='a'
 )
 logger = logging.getLogger("SilverProcessor")
-
 
 def main():
     # Paramétrage
@@ -34,12 +33,12 @@ def main():
         # Lecture depuis le Data Lake RAW
         df_raw = spark.read.parquet(input_path)
 
-        # --- OPTIMISATION: CACHE (Exigence: visible dans Spark UI
+        # _____ OPTIMISATION: CACHE _____
         df_raw.cache()
         count_raw = df_raw.count()
         logger.info("Nombre de lignes chargees: {}".format(count_raw))
 
-        # --- VALIDATION
+        # _____ VALIDATION _____
         logger.info("Application des regles de validation...")
         df_clean = df_raw.filter(
             (F.col("user_id").isNotNull()) &  # Regle 1: ID non nul
@@ -49,18 +48,18 @@ def main():
             (F.col("gender").isNotNull())  # Regle 5: Genre renseigne
         )
 
-        # --- WINDOW FUNCTION (Exigence: partition by ) ---
-        # Exemple: Classement par score d'engagement par pays
+        #_____ WINDOW FUNCTION (Exigence: partition by ) _____
+        # Classement par score d'engagement par pays
         logger.info("Calcul de la Window Function...")
         window_spec = Window.partitionBy("country").orderBy(F.desc("user_engagement_score"))
         df_silver = df_clean.withColumn("engagement_rank", F.row_number().over(window_spec))
 
-        # --- ECRITURE SILVER (Hive/HDF)
+        # _____ ECRITURE SILVER (Hive/HDF) _____
         database = "silver"
         spark.sql("CREATE DATABASE IF NOT EXISTS {}".format(database))
         spark.sql("USE {}".format(database))
 
-        #_____ Creation table global silver
+        #_____ Creation table global silver _____
         output_table = "instagram_data_silver_full"
         hdfs_path = "hdfs://namenode:9000/lakehouse/silver/" # Rendre dynamique
 
@@ -73,15 +72,15 @@ def main():
 
         logger.info("Traitement Silver termine avec succes vers {}".format(output_table))
 
-        # _____ Creation table silver users_profiles
         try :
             df_silver.printSchema()
+            # _____ Creation table silver users_profiles _____
             cols_profiles = ["user_id", "age", "gender", "country", "urban_rural","income_level", "education_level",
                              "employment_status", "relationship_status","has_children","weekly_work_hours",
                              "sleep_hours_per_night","exercise_hours_per_week","body_mass_index","perceived_stress_score",
                              "self_reported_happiness","year", "month", "day"
         ]
-
+            # _____ Creation table silver users_usage _____
             cols_usage = ["user_id","daily_active_minutes_instagram","user_engagement_score","sessions_per_day",
                           "average_session_length_minutes","reels_watched_per_day","time_on_reels_per_day",
                           "ads_viewed_per_day","ads_clicked_per_day","last_login_date","notification_response_rate",
@@ -152,7 +151,7 @@ def main():
 
             table = "instagram_data_users_enriched"
 
-            # 5. ECRITURE FINALE [cite: 30, 31, 32]
+            # 5. ECRITURE FINALE
             df_final.repartition(8).write \
                 .mode("overwrite") \
                 .format("parquet") \

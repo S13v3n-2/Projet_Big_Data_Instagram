@@ -9,7 +9,8 @@ log_filename = "/opt/pipeline/logs/silver_logs.log"
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.FileHandler(log_filename), logging.StreamHandler()]
+    filename=log_filename, # Redirige les flux vers le fichier directement
+    filemode='a'            # 'a' pour ajouter au fichier, 'w' pour écraser à chaque run
 )
 logger = logging.getLogger("SilverProcessor")
 
@@ -149,15 +150,17 @@ def main():
             df_final.persist()
             logger.info("Persist active pour df_final. Lignes : {}".format(df_final.count()))
 
+            table = "instagram_data_users_enriched"
+
             # 5. ECRITURE FINALE [cite: 30, 31, 32]
             df_final.repartition(8).write \
                 .mode("overwrite") \
                 .format("parquet") \
                 .partitionBy("year", "month", "day") \
                 .option("path", hdfs_path + "instagram_data_users_enriched") \
-                .saveAsTable("instagram_data_users_enriched")
+                .saveAsTable(table)
 
-            logger.info("Table users_enriched sauvegardee avec succes")
+            logger.info("Table {} sauvegardee avec succes").format(table)
 
         except Exception as e:
             logger.error("Erreur dans le calcul enriched : {}".format(str(e)))
