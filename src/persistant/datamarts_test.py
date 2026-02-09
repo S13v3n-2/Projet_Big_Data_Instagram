@@ -3,6 +3,7 @@ import sys
 import logging
 from pyspark.sql import SparkSession, functions as F
 from pyspark.sql.window import Window
+from pyspark import StorageLevel
 
 # --- CONFIGURATION DES LOGS (Version simplifiée sans handlers) ---
 log_filename = "/opt/pipeline/logs/gold_logs.log"
@@ -55,7 +56,7 @@ def main():
         df_silver = spark.table(table_source)
 
         # ___ OPTIMISATION AVEC PERSISTANCE DES DONNEES EN CACHE ___
-        df_silver.persist()
+        df_silver.persist(StorageLevel.MEMORY_AND_DISK)
         logger.info("Persist active sur la source Silver ({} lignes)".format(df_silver.count()))
 
         # 1. DATAMART : ANALYSE DE L'ENGAGEMENT

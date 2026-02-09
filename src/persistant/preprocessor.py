@@ -3,6 +3,7 @@ import sys
 import logging
 from pyspark.sql import SparkSession, functions as F
 from pyspark.sql.window import Window
+from pyspark import StorageLevel
 
 # ___ CONFIGURATION DES LOGS ___
 log_filename = "/opt/pipeline/logs/silver_logs.log"
@@ -34,7 +35,7 @@ def main():
         df_raw = spark.read.parquet(input_path)
 
         # _____ OPTIMISATION: CACHE _____
-        df_raw.cache()
+        df_raw.persist(StorageLevel.MEMORY_AND_DISK)
         count_raw = df_raw.count()
         logger.info("Nombre de lignes chargees: {}".format(count_raw))
 
@@ -159,7 +160,7 @@ def main():
                 .option("path", hdfs_path + "instagram_data_users_enriched") \
                 .saveAsTable(table)
 
-            logger.info("Table {} sauvegardee avec succes").format(table)
+            logger.info("Table {} sauvegardee avec succes".format(table))
 
         except Exception as e:
             logger.error("Erreur dans le calcul enriched : {}".format(str(e)))

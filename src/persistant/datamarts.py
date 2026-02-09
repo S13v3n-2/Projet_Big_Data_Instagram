@@ -8,8 +8,10 @@ log_filename = "/opt/pipeline/logs/gold_logs.log"
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.FileHandler(log_filename), logging.StreamHandler()]
+    filename=log_filename,
+    filemode='a'
 )
+
 logger = logging.getLogger("GoldDatamart")
 
 def init_spark():
