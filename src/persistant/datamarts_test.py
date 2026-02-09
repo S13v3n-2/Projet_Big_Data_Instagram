@@ -62,7 +62,12 @@ def main():
         # 1. DATAMART : ANALYSE DE L'ENGAGEMENT
         # On utilise les colonnes deja calculees dans ta table enrichie
         logger.info("Generation Datamart Engagement...")
-        df_engagement = df_silver.groupBy("country", "lifestyle_segment", "content_type_preference") \
+        df_engagement = df_silver.groupBy(
+            "country",
+            "lifestyle_segment",
+            "content_type_preference",
+            "preferred_content_theme"
+        ) \
             .agg(
             F.avg("user_engagement_score").alias("avg_engagement"),
             F.avg("engagement_rate_per_minute").alias("avg_efficiency"),
@@ -84,7 +89,14 @@ def main():
         logger.info("Generation Datamart Content Performance...")
         # On utilise le rang deja calcule par ta Window Function en Silver
         df_content = df_silver.filter(F.col("engagement_rank") <= 10) \
-            .select("user_id", "country", "lifestyle_segment", "content_type_preference", "engagement_rank")
+            .select(
+            "user_id",
+            "country",
+            "lifestyle_segment",
+            "content_type_preference",
+            "preferred_content_theme",
+            "engagement_rank"
+        )
 
         save_to_postgres(df_content, "gold_top_recommendations", jdbc_url, db_properties)
 
