@@ -1,167 +1,113 @@
+# -*- coding: utf-8 -*-
 import sys
 import logging
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
+from pyspark.sql import SparkSession, functions as F
 from pyspark.sql.window import Window
+from pyspark import StorageLevel
 
+# --- CONFIGURATION DES LOGS (Version simplifiée sans handlers) ---
 log_filename = "/opt/pipeline/logs/gold_logs.log"
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     filename=log_filename,
     filemode='a'
 )
-
 logger = logging.getLogger("GoldDatamart")
 
 def init_spark():
-    return (
-        SparkSession.builder
-        .appName("Instagram_Gold_Datamarts")
-        .config("spark.jars", "/opt/spark/jars/postgresql-42.7.1.jar")
-        .enableHiveSupport()
-        .getOrCreate()
-    )
+    """Initialise Spark avec support Hive et JDBC PostgreSQL."""
+    return (SparkSession.builder
+            .appName("Instagram_Gold_Datamart_Final")
+            .enableHiveSupport()
+            .getOrCreate())
 
-def write_postgres(df, table_name, jdbc_url, props):
-    df.write.jdbc(url=jdbc_url, table=table_name, mode="overwrite", properties=props)
-    logger.info("Table {} ecrite dans PostgreSQL".format(table_name))
+
+def save_to_postgres(df, table_name, url, props):
+    """Ecriture securisee dans PostgreSQL."""
+    try:
+        # On utilise repartition(1) pour l'ecriture JDBC afin d'eviter trop de connexions simultanees
+        df.repartition(1).write.jdbc(url=url, table=table_name, mode="overwrite", properties=props)
+        logger.info("Table Gold '{}' exportee avec succes.".format(table_name))
+    except Exception as e:
+        logger.error("Erreur export PostgreSQL sur {}: {}".format(table_name, str(e)))
+
 
 def main():
+    # Verification des arguments : on attend le nom de la table Silver (ex: silver.instagram_data_users_enriched)
     if len(sys.argv) < 2:
-        logger.error("Usage: datamart.py <silver_path>")
+        logger.error("Usage: datamart.py <silver_table_name>")
         sys.exit(1)
-    
-    silver_path = sys.argv[1]
-    
+
+    table_source = sys.argv[1]
     spark = init_spark()
-    
+
+    # Configuration de la base de donnees de destination (API)
     jdbc_url = "jdbc:postgresql://postgres-instagram:5432/instagram_db"
-    props = {
+    db_properties = {
         "user": "admin",
         "password": "password",
         "driver": "org.postgresql.Driver"
     }
-    
+
     try:
-        logger.info("Lecture Silver depuis: {}".format(silver_path))
-        df_silver = spark.read.parquet(silver_path)
-        
-        logger.info("Calcul moyenne globale engagement")
-        global_avg = df_silver.agg(F.avg("user_engagement_score")).collect()[0][0]
-        
-        logger.info("Datamart 1: engagement_by_content")
-        df_engagement = (
-            df_silver
-            .withColumn("age_range", 
-                F.when(F.col("age") < 25, "18-24")
-                .when(F.col("age") < 35, "25-34")
-                .when(F.col("age") < 45, "35-44")
-                .otherwise("45+"))
-            .withColumn("lifestyle_segment",
-                F.when((F.col("exercise_hours_per_week") > 5) & (F.col("self_reported_happiness") > 7), "Fit")
-                .when(F.col("sessions_per_day") > 10, "Workaholic")
-                .when(F.col("sessions_per_day") < 3, "Sleep")
-                .otherwise("Balanced"))
-            .groupBy("country", "age_range", "lifestyle_segment", 
-                    "content_type_preference", "preferred_content_theme")
+        logger.info("Lecture de la table source : {}".format(table_source))
+        df_silver = spark.table(table_source)
+
+        # ___ OPTIMISATION AVEC PERSISTANCE DES DONNEES EN CACHE ___
+        df_silver.persist(StorageLevel.MEMORY_AND_DISK)
+        logger.info("Persist active sur la source Silver ({} lignes)".format(df_silver.count()))
+
+        # 1. DATAMART : ANALYSE DE L'ENGAGEMENT
+        # On utilise les colonnes deja calculees dans ta table enrichie
+        logger.info("Generation Datamart Engagement...")
+        df_engagement = df_silver.groupBy(
+            "country",
+            "lifestyle_segment",
+            "content_type_preference",
+            "preferred_content_theme"
+        ) \
             .agg(
-                F.avg("user_engagement_score").alias("avg_engagement_score"),
-                F.count("user_id").alias("total_users"),
-                F.sum(F.when(F.col("sessions_per_day") == 0, 1).otherwise(0)).alias("churned_users")
-            )
-            .withColumn("churn_rate", F.col("churned_users") / F.col("total_users") * 100)
-            .withColumn("engagement_gain_pct", 
-                (F.col("avg_engagement_score") - global_avg) / global_avg * 100)
-            .withColumn("segment_id", 
-                F.concat_ws("-", F.col("country"), F.col("age_range"), 
-                           F.col("lifestyle_segment"), F.col("content_type_preference"),
-                           F.col("preferred_content_theme")))
+            F.avg("user_engagement_score").alias("avg_engagement"),
+            F.avg("engagement_rate_per_minute").alias("avg_efficiency"),
+            F.count("user_id").alias("total_users")
         )
-        
-        write_postgres(df_engagement, "engagement_by_content", jdbc_url, props)
-        
-        logger.info("Datamart 2: user_segmentation")
-        df_user_seg = (
-            df_silver
-            .withColumn("lifestyle_segment",
-                F.when((F.col("exercise_hours_per_week") > 5) & (F.col("self_reported_happiness") > 7), "Fit")
-                .when(F.col("sessions_per_day") > 10, "Workaholic")
-                .when(F.col("sessions_per_day") < 3, "Sleep")
-                .otherwise("Balanced"))
-            .withColumn("persona_cluster",
-                F.when(F.col("lifestyle_segment") == "Fit", 0)
-                .when(F.col("lifestyle_segment") == "Workaholic", 1)
-                .when(F.col("lifestyle_segment") == "Sleep", 2)
-                .otherwise(3))
-            .withColumn("churn_probability",
-                F.when(F.col("sessions_per_day") < 2, 0.8)
-                .when(F.col("sessions_per_day") < 5, 0.5)
-                .otherwise(0.2))
-            .withColumn("top_content_recommendation",
-                F.concat_ws("-", F.col("content_type_preference"), F.col("preferred_content_theme")))
-            .withColumn("lifetime_value_estimate",
-                F.col("user_engagement_score") * 0.5 + F.col("sessions_per_day") * 10)
+        save_to_postgres(df_engagement, "gold_engagement_stats", jdbc_url, db_properties)
+
+        # 2. DATAMART : RISQUE DE CHURN ET BIEN-ETRE (Pour Graphique 2)
+        logger.info("Generation Datamart Churn & Wellbeing...")
+        df_wellbeing = df_silver.groupBy("lifestyle_segment") \
+            .agg(
+            F.avg("digital_wellbeing_score").alias("avg_wellbeing_score"),
+            F.avg("days_since_last_login").alias("avg_days_inactive"),
+            F.sum(F.col("churn_risk_flag").cast("int")).alias("potential_churners")
+        )
+        save_to_postgres(df_wellbeing, "gold_user_health", jdbc_url, db_properties)
+
+        # 3. DATAMART : TOP CONTENUS PAR SEGMENT (Pour l'API / Graphique 3)
+        logger.info("Generation Datamart Content Performance...")
+        # On utilise le rang deja calcule par ta Window Function en Silver
+        df_content = df_silver.filter(F.col("engagement_rank") <= 10) \
             .select(
-                "user_id",
-                "persona_cluster",
-                F.col("lifestyle_segment").alias("persona_name"),
-                F.col("user_engagement_score").alias("predicted_engagement"),
-                "top_content_recommendation",
-                "churn_probability",
-                "lifetime_value_estimate"
-            )
+            "user_id",
+            "country",
+            "lifestyle_segment",
+            "content_type_preference",
+            "preferred_content_theme",
+            "engagement_rank"
         )
-        
-        write_postgres(df_user_seg, "user_segmentation", jdbc_url, props)
-        
-        logger.info("Datamart 3: content_performance")
-        window_rank = Window.partitionBy("content_type_preference").orderBy(F.desc("avg_engagement_score"))
-        
-        df_content_perf = (
-            df_silver
-            .groupBy("content_type_preference", "preferred_content_theme")
-            .agg(
-                F.count("user_id").alias("total_users_preferring"),
-                F.avg("user_engagement_score").alias("avg_engagement_score"),
-                F.avg("sessions_per_day").alias("avg_daily_minutes"),
-                F.first("country").alias("top_country")
-            )
-            .withColumn("rank_in_type", F.row_number().over(window_rank))
-            .withColumnRenamed("content_type_preference", "content_type")
-            .withColumnRenamed("preferred_content_theme", "content_theme")
-        )
-        
-        write_postgres(df_content_perf, "content_performance", jdbc_url, props)
-        
-        logger.info("Datamart 4: lifestyle_impact")
-        df_lifestyle = (
-            df_silver
-            .withColumn("lifestyle_segment",
-                F.when((F.col("exercise_hours_per_week") > 5) & (F.col("self_reported_happiness") > 7), "Fit")
-                .when(F.col("sessions_per_day") > 10, "Workaholic")
-                .when(F.col("sessions_per_day") < 3, "Sleep")
-                .otherwise("Balanced"))
-            .groupBy("lifestyle_segment", "content_type_preference")
-            .agg(
-                F.avg("self_reported_happiness").alias("avg_stress_score"),
-                F.avg("sessions_per_day").alias("avg_work_hours"),
-                F.avg("user_engagement_score").alias("avg_engagement"),
-                F.sum(F.when(F.col("sessions_per_day") > 10, 1).otherwise(0)).alias("over_usage_count"),
-                F.count("user_id").alias("total_users")
-            )
-            .withColumn("over_usage_pct", F.col("over_usage_count") / F.col("total_users") * 100)
-        )
-        
-        write_postgres(df_lifestyle, "lifestyle_impact", jdbc_url, props)
-        
-        logger.info("Tous les datamarts Gold crees avec succes")
-        
+
+        save_to_postgres(df_content, "gold_top_recommendations", jdbc_url, db_properties)
+
+        logger.info("Tous les Datamarts ont ete mis a jour dans PostgreSQL.")
+
     except Exception as e:
-        logger.error("Erreur: {}".format(str(e)))
-        raise
+        logger.error("Erreur durant le traitement Gold : {}".format(str(e)))
     finally:
+        df_silver.unpersist()
         spark.stop()
+
 
 if __name__ == "__main__":
     main()
