@@ -151,15 +151,6 @@ def main():
 
         logger.info("Table 'instagram_data_users_usage' sauvegardee.")
 
-        # Table Full Silver demandée par l'ancien script
-        path_full = "{}/silver/instagram_data_silver_full".format(hdfs_root)
-        df_silver.repartition(8).write \
-            .mode("overwrite") \
-            .format("parquet") \
-            .partitionBy("year", "month", "day", "country") \
-            .option("path", path_full) \
-            .saveAsTable("instagram_data_silver_full")
-
         logger.info("Traitement Silver complet termine avec succes.")
 
     except Exception as e:
