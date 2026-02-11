@@ -5,10 +5,11 @@ from typing import Optional, List, Dict, Any
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI, Depends, HTTPException, status, Query
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from jose import JWTError, jwt
 import uvicorn
+
 
 # --- CONFIGURATION ---
 SECRET_KEY = "super-secret-key-instagram-project"  # À changer en prod
@@ -93,12 +94,12 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
 
 # 1. Login
 @app.post("/auth/login", response_model=Token)
-def login(login_data: LoginRequest):
-    # Simule une authentification basique
-    if login_data.username == "admin" and login_data.password == "admin":
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+
+    if form_data.username == "admin" and form_data.password == "admin":
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
-            data={"sub": login_data.username}, expires_delta=access_token_expires
+            data={"sub": form_data.username}, expires_delta=access_token_expires
         )
         return {"access_token": access_token, "token_type": "bearer"}
     else:

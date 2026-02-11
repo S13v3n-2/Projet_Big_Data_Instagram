@@ -74,6 +74,7 @@ def main():
             .format("parquet") \
             .partitionBy("year", "month", "day","country") \
             .option("path", hdfs_path) \
+            .saveAsTable("instagram_data_raw")
 
         logger.info("Ingestion RAW terminee. Table Hive: {}".format(hdfs_path))
 

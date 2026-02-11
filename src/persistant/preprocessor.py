@@ -50,7 +50,6 @@ def main():
         window_country = Window.partitionBy("country").orderBy(F.desc("user_engagement_score"))
         df_silver = df_clean.withColumn("engagement_rank", F.row_number().over(window_country))
 
-        # --- OPTIMISATION MAJEURE ---
         # On persiste ce DataFrame car il va servir de source pour TOUTES les tables (Enriched, Profiles, Usage)
         # Cela évite de relire le fichier RAW 3 fois.
         df_silver.persist(StorageLevel.MEMORY_AND_DISK)

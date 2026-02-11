@@ -5,7 +5,7 @@ from pyspark.sql import SparkSession, functions as F
 from pyspark.sql.window import Window
 from pyspark import StorageLevel
 
-# --- CONFIGURATION DES LOGS (Version simplifiée sans handlers) ---
+# _____CONFIGURATION DES LOGS (Version simplifiée sans handlers)_____
 log_filename = "/opt/pipeline/logs/gold_logs.log"
 
 logging.basicConfig(
