@@ -80,86 +80,101 @@ Table unifiée créée via jointure `users_profiles ⋈ users_usage` avec **feat
 - `churn_risk_flag` : Boolean (True si inactif >90j)
 - `engagement_by_content_type` : Score selon content_preference
 
-### Couche Gold (Business Data)
+## Couche Gold (Business Datamarts)
 
-* **Stockage :** Datamart PostgreSQL (table users_clean) pour les requetes de production.
-* **Analytique Avancee :**
-  * Segmentation par K-Means pour definir des personas bases sur le lifestyle et la consommation.
-  * Prediction du score d'engagement via un modele XGBoost.
-* **Recommandations :** Generation de fichiers Parquet listant les recommandations de contenus par segment.
+La couche Gold agrège la table Silver enrichie et exporte les résultats dans PostgreSQL pour l'API FastAPI et les dashboards Power BI. Tout est géré par `datamarts.py`.
 
-#### **Datamart 1 : `gold.engagement_by_content`**
+- **Input Gold :** table Hive `silver.instagram_data_users_enriched`.  
+- **Output Gold :** 3 tables PostgreSQL :
+  - `gold_engagement_stats`
+  - `gold_user_health`
+  - `gold_top_recommendations`
 
-Table agrégée pour identifier le **contenu optimal par segment**.
+La connexion PostgreSQL se fait via JDBC (`jdbc:postgresql://postgres-instagram:5432/instagram_db`, utilisateur `admin`).
 
-| Colonnes clés | Description |
-|---------------|-------------|
-| `segment_id` (PK) | "France-25-34-Fit-Reels-Fitness" |
-| `country`, `age_range` | Segmentation géo/démo |
-| `lifestyle_segment` | Fit/Workaholic/Sleep/Balanced |
-| `content_type` | Reels/Stories/Photos |
-| `content_theme` | Fitness/Fashion/Food... |
-| `avg_engagement_score` | Moyenne engagement segment |
-| `total_users` | Nombre users |
-| `engagement_gain_pct` | % gain vs moyenne globale |
-| `churn_rate` | % churners segment |
+---
 
-**Utilisation** : API `/recommendations` + Heatmap Power BI
+### Datamart `gold_engagement_stats` (Engagement par segment et contenu)
 
-#### **Datamart 2 : `gold.user_segmentation`**
+Datamart agrégé pour analyser la performance d'engagement par segment et par préférences de contenu.
 
-Résultats **K-Means clustering + prédictions XGBoost** par utilisateur.
+**Agrégation :**
 
-#### Schéma
+```text
+GROUP BY country, lifestyle_segment, content_type_preference, preferred_content_theme
+- avg(user_engagement_score)       → avg_engagement
+- avg(engagement_rate_per_minute)  → avg_efficiency
+- count(user_id)                   → total_users
+```
 
-| Colonnes clés | Description |
-|---------------|-------------|
-| `user_id` (PK) | Identifiant |
-| `persona_cluster` | Cluster K-Means (0-3) |
-| `persona_name` | "Fit Enthusiast" / "Workaholic" / "Balanced" / "Sleep Deprived" |
-| `predicted_engagement` | Score prédit XGBoost |
-| `top_content_recommendation` | "Reels-Fitness" |
-| `churn_probability` | Probabilité churner (0-1) |
-| `lifetime_value_estimate` | LTV estimé (€) |
+**Schéma logique :**
 
-**Utilisation** : 
-API : Endpoint /user-profile/{user_id} pour prédictions individuelles + Power BI : Dashboard personas (scatter plot churn vs engagement)
+| Colonne                     | Description                                        |
+|-----------------------------|----------------------------------------------------|
+| `country`                   | Pays                                               |
+| `lifestyle_segment`         | Segment de style de vie                            |
+| `content_type_preference`   | Type de contenu préféré                            |
+| `preferred_content_theme`   | Thème de contenu préféré                           |
+| `avg_engagement`            | Score d'engagement moyen du segment               |
+| `avg_efficiency`            | Engagement moyen par minute active                |
+| `total_users`               | Nombre d'utilisateurs dans le segment             |
 
-#### **Datamart 3 : `gold.content_performance`**
+> Utilisé pour identifier le **contenu optimal par segment** (API + dashboards Power BI).
 
-Performance globale par type/thème de contenu (pour dashboard).
+---
 
-#### Schéma
+### Datamart `gold_user_health` (Churn & bien‑être numérique)
 
-| Colonnes clés | Description |
-|---------------|-------------|
-| `content_type`, `content_theme` (PK) | Reels-Fitness, Stories-Fashion |
-| `total_users_preferring` | Nombre users préférant |
-| `avg_engagement_score` | Score moyen |
-| `avg_daily_minutes` | Temps moyen consommé |
-| `top_country` | Pays le plus engagé |
-| `rank_in_type` | Rang via Window Function |
+Datamart résumant l'état de bien‑être numérique et le risque de churn par segment de lifestyle.
 
-**Utilisation** : 
-API : Endpoint /content-stats pour ranking contenus + Power BI : Bar chart "Top Contenus par Type/Thème"
+**Agrégation :**
 
-#### **Datamart 4 : `gold.lifestyle_impact`**
+```text
+GROUP BY lifestyle_segment
+- avg(digital_wellbeing_score)  → avg_wellbeing_score
+- avg(days_since_last_login)    → avg_days_inactive
+- sum(churn_risk_flag)          → potential_churners
+```
 
-Analyse **lifestyle vs engagement** (stress, travail, santé).
+**Schéma logique :**
 
-#### Schéma
+| Colonne                 | Description                                   |
+|-------------------------|-----------------------------------------------|
+| `lifestyle_segment`     | Segment de style de vie                       |
+| `avg_wellbeing_score`   | Score moyen de bien‑être numérique           |
+| `avg_days_inactive`     | Jours moyens depuis la dernière connexion    |
+| `potential_churners`    | Nombre d'utilisateurs à risque de churn      |
 
-| Colonnes clés | Description |
-|---------------|-------------|
-| `lifestyle_segment` (PK) | Fit/Workaholic/Sleep/Balanced |
-| `content_type_preference` | Reels/Stories/Photos |
-| `avg_stress_score` | Stress moyen 0-10 |
-| `avg_work_hours` | Heures travail/semaine |
-| `avg_engagement` | Engagement moyen |
-| `over_usage_pct` | % users sur-usage (>5h/j) |
+> Utilisé pour les analyses **churn / santé numérique** et les alertes sur les segments à risque.
 
-**Utilisation** : 
-API : Endpoint /wellbeing-insights pour alertes santé numérique + Power BI : Scatter plot stress vs engagement par segment
+---
+
+### Datamart `gold_top_recommendations` (Top users par engagement)
+
+Datamart listant les utilisateurs les plus engagés, basé sur le rang calculé en Silver.
+
+**Filtre et sélection :**
+
+- Filtre : `engagement_rank <= 10` (top 10 par pays).
+- Colonnes sélectionnées :
+  - `user_id`, `country`, `lifestyle_segment`,
+  - `content_type_preference`, `preferred_content_theme`,
+  - `engagement_rank`.
+
+**Schéma logique :**
+
+| Colonne                     | Description                                   |
+|-----------------------------|-----------------------------------------------|
+| `user_id`                   | Identifiant utilisateur                       |
+| `country`                   | Pays                                          |
+| `lifestyle_segment`         | Segment de style de vie                       |
+| `content_type_preference`   | Type de contenu recommandé/préféré           |
+| `preferred_content_theme`   | Thème de contenu recommandé/préféré          |
+| `engagement_rank`           | Rang d'engagement (top 10 par pays)          |
+
+> Utilisé pour les **recommandations de contenus** (API) et les vues "Top N utilisateurs" dans Power BI.
+
+---
 
 ## 3. Stack Technique
 
